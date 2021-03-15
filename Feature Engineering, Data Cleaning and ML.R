@@ -294,6 +294,7 @@ EX1 <- mutate(EX1, admission_type_id = case_when(
 )
 ) 
 
+##some of the discharge disopsition ids were unnecessary due to them either being expired, in hospice or null       
 ##get rid of expired values
 EX1<-EX1%>%filter(discharge_disposition_id !=11)
 EX1<-EX1%>%filter(discharge_disposition_id !=18)
@@ -324,16 +325,14 @@ EX1 <- mutate(EX1, discharge_disposition_id = case_when(
 )
 )
 
-
-
-##recoding into a binary target
+##encoding into a binary target
 
 EX1$readmittedgroup <- ifelse(EX1$readmitted == "<30", 1, 0)
 table(EX1$readmittedgroup)
 prop.table(table(EX1$readmittedgroup))
 
      
-##boruta test
+##boruta test to see correlations between target variale and others.
 EX2 <-EX1
      
 set.seed(123)
@@ -396,22 +395,17 @@ settest <-EX1[-indtrain, ]
      
 sum(is.na(settrain))
 sum(is.na(settest))
-EX1 <- EX1 %>%
-  na.omit()     
+   
      
 onehot_enc <-dummyVars(~ diabetesMed + insulin + admission_type_id +DL,
                             EX1[, c("diabetesMed", "insulin", "admission_type_id", "DL")],
                             levelsOnly = TRUE)
-sum(is.na(onehot_enc))
 
 onehottraining <- predict(onehot_enc,
                                settrain[, c("diabetesMed", "insulin", "admission_type_id", "DL")])
-
-sum(is.na(onehottraining))     
 settrain<- cbind(settrain, onehottraining)
-     
+
 onehottesting <- predict(onehot_enc, settest[, c("diabetesMed", "insulin", "admission_type_id", "DL")])
-     
 settest <- cbind(settest, onehottesting)
 
 
@@ -421,17 +415,11 @@ settest[, 7:10]<- scale(settest[, 7:10],
                              scale = apply(settrain[, 7:10], 2, sd))
 settrain[, 7:10]<-scale(settrain[, 7:10])
 
-sum(is.na(settrain))
-sum(is.na(settest))
      
 levels(settrain$readmittedgroup)[levels(settrain$readmittedgroup)==0]<- "Negative"
 levels(settrain$readmittedgroup)[levels(settrain$readmittedgroup)==1]<- "Positive"
      
 modelLookup("rf")
-     
-     
-sum(is.na(recc_mtry))
-sum(is.na(rfGrid))
      
 recc_mtry <- floor(sqrt(ncol(settrain[, -1*c(25:47)])))
 rfGrid <- expand.grid(mtry= c(recc_mtry-2, recc_mtry, recc_mtry+2))                   
@@ -439,12 +427,8 @@ rfGrid <- expand.grid(mtry= c(recc_mtry-2, recc_mtry, recc_mtry+2))
 rfControl <- trainControl(method = "oob",
                                classProbs = TRUE)
 
-sum(is.na(rfControl))
-
 rfControl <- rfControl %>%
   na.omit() 
-
-sum(is.na(settest))
 
 rf_onehot <- train(x=settrain[, -1*c(24:47)], y=settrain[, 24],
                         method="rf",
@@ -564,5 +548,3 @@ calibration_curve <-calibration(readmittedgroup~class_probabilities_onehot +
 plot(calibration_curve,
      type= "1",
      auto.key = list(columns = 2, lines=TRUE, points=FALSE))
-
-confusionMatrix(settest)
